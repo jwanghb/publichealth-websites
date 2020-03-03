@@ -18,3 +18,8 @@ TopicModelHealthWebsites.HALT_LDA(K = K, datapath = "/data/dataanddict.jld", sav
 	
 ## Data
 We provide data from webpages nested within 20 health department websites. 
+```
+data = load("/data/dataanddict.jld")
+data["dictionary"] # list of words
+data["words"] # text from webpages in websites converted to indices
+```
