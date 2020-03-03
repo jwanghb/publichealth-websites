@@ -1,23 +1,12 @@
 module TopicModelHealthWebsites
 using Distributions, StatsBase, Dates, SpecialFunctions, JLD
-export mcmc
-function mcmc(; n_iter::Integer, n_burn::Integer, n_lag::Integer,
-                K::Integer,beta::Float64, gamma::Float64,
-                c0alpha0::Array{Float64,1}, sigma0::Float64, sigmac::Float64, a::Float64, b::Float64, c::Float64, da::Float64, db::Float64,
-                datapath::String, savepath::String)
-    # global M, Mi, Mis, c, da, db, a, b, N, words, K, Ka, alpha, c0alpha0, gamma, beta, topics, V, n, m0, m1, n_list, m0_list, m1_list, alpha_list, c0alpha0_list, c_list, sigma0, sigmac
-    # a = a + 0.0
-    # b = b + 0.0
-    # c = c + 0.0
-    # da = da + 0.0
-    # db = db + 0.0
-    # c0alpha0 = c0alpha0
-    # sigma0 = sigma0 + 0.0
-    # sigmac = sigmac + 0.0
-    # beta = beta
-    # gamma = gamma
-    # K = _K
+export HALT_LDA
+# Latent Dirichlet Allocation with hierarchical asymmetric prior + local topics (1 per website)
+function HALT_LDA(; K::Integer, datapath::String, savepath::String, 
+                n_iter = 100, n_burn = 0, n_lag = 5,
+                c0alpha0_const = 10.0, beta = 0.05, gamma = 0.05, sigma0 = 5.0, sigmac = 0.05, a = 1.0, b = 1.0, c = 1.0, da = 1.0, db = 1.0)
     Ka = K + 1
+    c0alpha0 = fill(c0alpha0_const, (Ka))
     data = load(datapath)
     words, V = data["words"], length(data["dictionary"])
     N = [[length(x) for x in y] for y in words]
@@ -110,7 +99,7 @@ function lpiratio_c(c_new, c, a, b, N, M, Mi, Mis, m1, alpha)
     return(lpiratio)
 end
 function sample_multiple(M, Mi, Mis, c, da, db, a, b, N, words, K, Ka, alpha, c0alpha0, gamma, beta, topics, V, n, m0, m1, sigma0, sigmac,
-                        n_iter = 400, n_burn = 300, n_lag = 5)
+                        n_iter = 100, n_burn = 0, n_lag = 5)
     alpha_list = []
     c0alpha0_list = []
     c_list = []
@@ -168,18 +157,18 @@ function sample_multiple(M, Mi, Mis, c, da, db, a, b, N, words, K, Ka, alpha, c0
         # Sample global means (univariate proposals)
         for k in 1:Ka
             c0alpha0_k = c0alpha0[k]
-            c0alpha0_k_new = rand(TruncatedNormal(c0alpha0_k, sigma0, 0, c0alpha0_k*2))
+            c0alpha0_k_new = rand(truncated(Normal(c0alpha0_k, sigma0), 0, c0alpha0_k*2))
             c0alpha0_new = copy(c0alpha0)
             c0alpha0_new[k] = c0alpha0_k_new
-            diff = lpiratio_c0alpha0(c0alpha0_new, c0alpha0, alpha, da, db, M, k) + logpdf(TruncatedNormal(c0alpha0_k_new, sigma0, 0, c0alpha0_k_new*2), c0alpha0_k) - logpdf(TruncatedNormal(c0alpha0_k, sigma0, 0, c0alpha0_k*2), c0alpha0_k_new)
+            diff = lpiratio_c0alpha0(c0alpha0_new, c0alpha0, alpha, da, db, M, k) + logpdf(truncated(Normal(c0alpha0_k_new, sigma0), 0, c0alpha0_k_new*2), c0alpha0_k) - logpdf(truncated(Normal(c0alpha0_k, sigma0), 0, c0alpha0_k*2), c0alpha0_k_new)
             ar = exp(diff)
             if ar >= rand(Uniform(0,1))
                 c0alpha0[k] = c0alpha0_k_new
             end
         end
         # Sample c
-        c_new = rand(TruncatedNormal(c, sigmac, 0, c*2))
-        ar = exp(lpiratio_c(c_new, c, a, b, N, M, Mi, Mis, m1, alpha) + logpdf(TruncatedNormal(c_new, sigmac, 0, c_new*2), c) - logpdf(TruncatedNormal(c, sigmac, 0, c*2), c_new))
+        c_new = rand(truncated(Normal(c, sigmac), 0, c*2))
+        ar = exp(lpiratio_c(c_new, c, a, b, N, M, Mi, Mis, m1, alpha) + logpdf(truncated(Normal(c_new, sigmac), 0, c_new*2), c) - logpdf(truncated(Normal(c, sigmac), 0, c*2), c_new))
         if ar >= rand(Uniform(0,1))
             c = c_new
         end
